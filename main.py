@@ -3,8 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import models, database
 from routes import router
 
-# Create the database tables
-models.Base.metadata.create_all(bind=database.engine)
+# Create the database tables with error handling
+try:
+    models.Base.metadata.create_all(bind=database.engine)
+    print("✓ Database tables created successfully")
+except Exception as e:
+    print(f"⚠ Warning: Could not create database tables on startup: {e}")
+    print("The app will continue running. Tables will be created on first database operation.")
 
 app = FastAPI(title="Jay Industries API")
 
