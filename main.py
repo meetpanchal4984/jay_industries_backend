@@ -32,3 +32,8 @@ app.include_router(router)
 @app.get("/")
 def root():
     return {"message": "Welcome to Jay Industries Authentication API"}
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint - doesn't require database"""
+    return {"status": "ok", "message": "FastAPI server is running"}
