@@ -15,10 +15,12 @@ CONTACT_RECEIVER = os.getenv("CONTACT_RECEIVER", "meetpanchal4984@gmail.com")
 def send_contact_email(name, email, phone, subject, message):
     if not SMTP_USER or not SMTP_PASS:
         print("SMTP credentials not configured. Email not sent.")
+        print(f"SMTP_USER: {SMTP_USER}")
+        print(f"SMTP_PASS: {'*' * len(SMTP_PASS) if SMTP_PASS else 'Not set'}")
         return False
 
     msg = MIMEMultipart()
-    msg['From'] = email
+    msg['From'] = SMTP_USER  # Use SMTP_USER instead of email
     msg['To'] = CONTACT_RECEIVER
     msg['Reply-To'] = email
     msg['Subject'] = f"New Contact Inquiry: {subject}"
@@ -97,12 +99,27 @@ def send_contact_email(name, email, phone, subject, message):
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        print(f"Attempting to send email to {CONTACT_RECEIVER}")
+        print(f"From: {SMTP_USER}")
+        print(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
+        
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
         server.send_message(msg)
         server.quit()
+        
+        print(f"✓ Email sent successfully to {CONTACT_RECEIVER}")
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"❌ Authentication failed: {e}")
+        print(f"Check your Gmail app password. Make sure you're using an App Password, not your regular Gmail password.")
+        return False
+    except smtplib.SMTPException as e:
+        print(f"❌ SMTP error: {e}")
+        return False
     except Exception as e:
-        print(f"Error sending email: {e}")
+        print(f"❌ Error sending email: {e}")
+        import traceback
+        traceback.print_exc()
         return False
