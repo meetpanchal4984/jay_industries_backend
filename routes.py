@@ -81,9 +81,9 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
         )
 
 @router.post("/contact")
-def handle_contact(contact: schemas.ContactCreate):
+async def handle_contact(contact: schemas.ContactCreate):
     from email_utils import send_contact_email
-    success = send_contact_email(
+    success = await send_contact_email(
         name=contact.full_name,
         email=contact.email,
         phone=contact.phone,
@@ -91,7 +91,5 @@ def handle_contact(contact: schemas.ContactCreate):
         message=contact.message
     )
     if not success:
-        # We still return 200 but maybe with a warning or just log it
-        # Actually, let's return a specific message
         return {"message": "Message received, but email notification failed. We will check it manually."}
     return {"message": "Your message has been sent successfully!"}
