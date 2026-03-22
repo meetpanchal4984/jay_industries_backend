@@ -8,3 +8,4 @@ pydantic
 email-validator
 python-dotenv
 python-multipart
+sendgrid
