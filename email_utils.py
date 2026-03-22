@@ -11,20 +11,45 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "").replace(" ", "")  # Remove spaces from app password
 CONTACT_RECEIVER = os.getenv("CONTACT_RECEIVER", "meetpanchal4984@gmail.com")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "noreply@jayindustries.com")
 
-def send_contact_email(name, email, phone, subject, message):
-    if not SMTP_USER or not SMTP_PASS:
-        print("SMTP credentials not configured. Email not sent.")
-        print(f"SMTP_USER: {SMTP_USER}")
-        print(f"SMTP_PASS: {'*' * len(SMTP_PASS) if SMTP_PASS else 'Not set'}")
+def send_with_sendgrid(name, email, phone, subject, message, html_content):
+    """Attempt to send email via SendGrid API."""
+    if not SENDGRID_API_KEY or "your_sendgrid_api_key_here" in SENDGRID_API_KEY:
+        print("SendGrid API key not configured or still using placeholder.")
+        return False
+    
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail, Email, To, Content
+        
+        print(f"Attempting to send email via SendGrid API to {CONTACT_RECEIVER}")
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        from_email = Email(SENDGRID_FROM_EMAIL)
+        to_email = To(CONTACT_RECEIVER)
+        mail_subject = f"New Contact Inquiry: {subject}"
+        content = Content("text/html", html_content)
+        
+        mail = Mail(from_email, to_email, mail_subject, content)
+        mail.reply_to = Email(email)
+        
+        response = sg.client.mail.send.post(request_body=mail.get())
+        if response.status_code >= 200 and response.status_code < 300:
+            print(f"[SUCCESS] Email sent successfully via SendGrid to {CONTACT_RECEIVER}")
+            return True
+        else:
+            print(f"[ERROR] SendGrid error: Status {response.status_code}")
+            print(f"Response Body: {response.body}")
+            return False
+    except ImportError:
+        print("[ERROR] SendGrid library not installed. Please add 'sendgrid' to requirements.txt")
+        return False
+    except Exception as e:
+        print(f"[ERROR] SendGrid exception: {e}")
         return False
 
-    msg = MIMEMultipart()
-    msg['From'] = SMTP_USER  # Use SMTP_USER instead of email
-    msg['To'] = CONTACT_RECEIVER
-    msg['Reply-To'] = email
-    msg['Subject'] = f"New Contact Inquiry: {subject}"
-
+def send_contact_email(name, email, phone, subject, message):
     html_content = f"""
     <html>
     <head>
@@ -95,12 +120,29 @@ def send_contact_email(name, email, phone, subject, message):
     </body>
     </html>
     """
-    
+
+    # Try SendGrid first as it's more reliable on platforms like Render
+    if SENDGRID_API_KEY and "your_sendgrid_api_key_here" not in SENDGRID_API_KEY:
+        if send_with_sendgrid(name, email, phone, subject, message, html_content):
+            return True
+        print("SendGrid failed, falling back to SMTP...")
+
+    # Fallback to SMTP (might fail on Render Free Tier)
+    if not SMTP_USER or not SMTP_PASS:
+        print("SMTP credentials not configured. Email not sent.")
+        print(f"SMTP_USER: {SMTP_USER}")
+        print(f"SMTP_PASS: {'*' * len(SMTP_PASS) if SMTP_PASS else 'Not set'}")
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_USER
+    msg['To'] = CONTACT_RECEIVER
+    msg['Reply-To'] = email
+    msg['Subject'] = f"New Contact Inquiry: {subject}"
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
-        print(f"Attempting to send email to {CONTACT_RECEIVER}")
-        print(f"From: {SMTP_USER}")
+        print(f"Attempting to send email via SMTP to {CONTACT_RECEIVER}")
         print(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
         
         if SMTP_PORT == 465:
@@ -112,17 +154,20 @@ def send_contact_email(name, email, phone, subject, message):
         server.send_message(msg)
         server.quit()
         
-        print(f"✓ Email sent successfully to {CONTACT_RECEIVER}")
+        print(f"[SUCCESS] Email sent successfully to {CONTACT_RECEIVER}")
         return True
     except smtplib.SMTPAuthenticationError as e:
-        print(f"❌ Authentication failed: {e}")
+        print(f"[ERROR] SMTP Authentication failed: {e}")
         print(f"Check your Gmail app password. Make sure you're using an App Password, not your regular Gmail password.")
         return False
-    except smtplib.SMTPException as e:
-        print(f"❌ SMTP error: {e}")
+    except OSError as e:
+        if "[Errno 101]" in str(e) or "Network is unreachable" in str(e):
+            print(f"[ERROR] Network Error: {e}")
+            print("This usually happens on Render's Free tier because they block SMTP ports (25, 465, 587).")
+            print("ACTION REQUIRED: Please provide a SendGrid API Key in your environment variables to bypass this restriction.")
+        else:
+            print(f"[ERROR] Network error: {e}")
         return False
     except Exception as e:
-        print(f"❌ Error sending email: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"[ERROR] Error sending email: {e}")
         return False
