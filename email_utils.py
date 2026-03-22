@@ -12,7 +12,7 @@ else:
 
 # Email Configuration
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "").replace(" ", "")
 CONTACT_RECEIVER = os.getenv("CONTACT_RECEIVER", "meetpanchal5903@gmail.com")
