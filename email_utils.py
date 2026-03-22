@@ -103,8 +103,11 @@ def send_contact_email(name, email, phone, subject, message):
         print(f"From: {SMTP_USER}")
         print(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
         
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
-        server.starttls()
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
+        else:
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
+            server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
         server.send_message(msg)
         server.quit()
