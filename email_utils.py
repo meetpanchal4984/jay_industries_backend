@@ -28,7 +28,7 @@ conf = ConnectionConfig(
     MAIL_FROM=SMTP_USER, # Must match your Gmail account
     MAIL_PORT=SMTP_PORT,
     MAIL_SERVER=SMTP_SERVER,
-    MAIL_STARTTLS=True if SMTP_PORT == 587 else False,
+    MAIL_STARTTLS=False if SMTP_PORT == 465 else True,
     MAIL_SSL_TLS=True if SMTP_PORT == 465 else False,
     USE_CREDENTIALS=True,
     VALIDATE_CERTS=True,
