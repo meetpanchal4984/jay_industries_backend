@@ -8,4 +8,4 @@ pydantic
 email-validator
 python-dotenv
 python-multipart
-sendgrid
+fastapi-mail==1.4.1
