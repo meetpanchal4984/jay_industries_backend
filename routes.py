@@ -105,6 +105,28 @@ def get_products(db: Session = Depends(get_db)):
 def get_admin_products(current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
     return db.query(models.Product).all()
 
+@router.get("/admin/dashboard-data", response_model=schemas.AdminDashboardData)
+def get_admin_dashboard_data(current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    # Fetch stats
+    total_users = db.query(models.User).count()
+    logged_in_users = db.query(models.User).filter(models.User.is_logged_in == True).count()
+    
+    # Fetch users
+    users = db.query(models.User).all()
+    
+    # Fetch products
+    products = db.query(models.Product).all()
+    
+    return {
+        "stats": {
+            "total_users": total_users,
+            "logged_in_users": logged_in_users,
+            "active_users": logged_in_users
+        },
+        "users": users,
+        "products": products
+    }
+
 @router.put("/admin/products/{product_id}/toggle-publish", response_model=schemas.ProductResponse)
 def toggle_product_publish(product_id: int, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
@@ -193,8 +215,11 @@ async def create_product(
         raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
 @router.post("/logout")
 def logout(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    current_user.is_logged_in = False
-    db.commit()
+    # Fetch the user in the current session to ensure the update is recorded
+    db_user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if db_user:
+        db_user.is_logged_in = False
+        db.commit()
     return {"message": "Logged out successfully"}
 
 @router.put("/admin/users/{user_id}/toggle-admin", response_model=schemas.UserResponse)
