@@ -11,8 +11,8 @@ class User(Base):
     mobile = Column(String(15), unique=True, index=True)
     hashed_password = Column(String)
     is_registered = Column(Boolean, default=False)
-    is_logged_in = Column(Boolean, default=False)
-    is_admin = Column(Boolean, default=False)
+    is_logged_in = Column(Boolean, default=False, index=True)
+    is_admin = Column(Boolean, default=False, index=True)
 
 class Product(Base):
     __tablename__ = "products"

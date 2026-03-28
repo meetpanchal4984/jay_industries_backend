@@ -6,9 +6,9 @@ from routes import router
 # Create the database tables with error handling
 try:
     models.Base.metadata.create_all(bind=database.engine)
-    print("✓ Database tables created successfully")
+    print("[INFO] Database tables created successfully")
 except Exception as e:
-    print(f"⚠ Warning: Could not create database tables on startup: {e}")
+    print(f"[WARNING] Warning: Could not create database tables on startup: {e}")
     print("The app will continue running. Tables will be created on first database operation.")
 
 from fastapi.staticfiles import StaticFiles
@@ -29,9 +29,9 @@ def startup_event():
     try:
         db.query(models.User).update({models.User.is_logged_in: False})
         db.commit()
-        print("✓ Reset all user login statuses on startup")
+        print("[INFO] Reset all user login statuses on startup")
     except Exception as e:
-        print(f"⚠ Warning: Could not reset login statuses: {e}")
+        print(f"[WARNING] Warning: Could not reset login statuses: {e}")
     finally:
         db.close()
 

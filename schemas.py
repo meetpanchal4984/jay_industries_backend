@@ -74,3 +74,8 @@ class ContactCreate(BaseModel):
     phone: str
     subject: str
     message: str
+
+class AdminDashboardData(BaseModel):
+    stats: DashboardStats
+    users: List[UserResponse]
+    products: List[ProductResponse]
