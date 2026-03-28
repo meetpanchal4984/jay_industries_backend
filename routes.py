@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from typing import List
 import models, schemas, auth, database
+import shutil
+import os
+import uuid
 
 router = APIRouter()
 
@@ -16,18 +20,13 @@ def get_db():
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     try:
-        # Check if the email or mobile is already registered
         db_user = db.query(models.User).filter(
             (models.User.email == user.email) | (models.User.mobile == user.mobile)
         ).first()
         if db_user:
-            raise HTTPException(
-                status_code=400,
-                detail="Email or Mobile already registered"
-            )
+            raise HTTPException(status_code=400, detail="Email or Mobile already registered")
         
         hashed_password = auth.get_password_hash(user.password)
-        
         new_user = models.User(
             full_name=user.full_name,
             email=user.email,
@@ -43,16 +42,11 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         db.rollback()
-        print(f"Registration error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Registration failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 @router.post("/token", response_model=schemas.Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     try:
-        # Since OAuth2PasswordRequestForm expects username and password, we assume username = email
         user = db.query(models.User).filter(models.User.email == form_data.username).first()
         if not user or not auth.verify_password(form_data.password, user.hashed_password):
             raise HTTPException(
@@ -61,24 +55,15 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = auth.create_access_token(
-            data={"sub": user.email}, expires_delta=access_token_expires
-        )
-        
-        # Update login status
+        access_token = auth.create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
         user.is_logged_in = True
         db.commit()
-        
         return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        print(f"Login error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Login failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @router.post("/contact")
 async def handle_contact(contact: schemas.ContactCreate):
@@ -91,5 +76,137 @@ async def handle_contact(contact: schemas.ContactCreate):
         message=contact.message
     )
     if not success:
-        return {"message": "Message received, but email notification failed. We will check it manually."}
+        return {"message": "Message received, but email notification failed."}
     return {"message": "Your message has been sent successfully!"}
+
+@router.get("/me", response_model=schemas.UserResponse)
+def get_me(current_user: models.User = Depends(auth.get_current_user)):
+    return current_user
+
+@router.get("/admin/stats", response_model=schemas.DashboardStats)
+def get_admin_stats(current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    total_users = db.query(models.User).count()
+    logged_in_users = db.query(models.User).filter(models.User.is_logged_in == True).count()
+    return {
+        "total_users": total_users,
+        "logged_in_users": logged_in_users,
+        "active_users": logged_in_users
+    }
+
+@router.get("/admin/users", response_model=list[schemas.UserResponse])
+def get_admin_users(current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    return db.query(models.User).all()
+
+@router.get("/products", response_model=List[schemas.ProductResponse])
+def get_products(db: Session = Depends(get_db)):
+    return db.query(models.Product).filter(models.Product.is_published == True).all()
+
+@router.get("/admin/products", response_model=List[schemas.ProductResponse])
+def get_admin_products(current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    return db.query(models.Product).all()
+
+@router.put("/admin/products/{product_id}/toggle-publish", response_model=schemas.ProductResponse)
+def toggle_product_publish(product_id: int, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    product.is_published = not product.is_published
+    db.commit()
+    db.refresh(product)
+    return product
+
+@router.delete("/admin/products/{product_id}")
+def delete_product(product_id: int, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Delete main image file
+    if product.image_url.startswith("/static/"):
+        path = product.image_url.lstrip("/")
+        if os.path.exists(path):
+            os.remove(path)
+            
+    # Sub-images will be deleted by cascade from DB, but we need to delete the files
+    for img in product.sub_images:
+        if img.image_url.startswith("/static/"):
+            path = img.image_url.lstrip("/")
+            if os.path.exists(path):
+                os.remove(path)
+                
+    db.delete(product)
+    db.commit()
+    return {"message": "Product and associated images deleted successfully!"}
+
+@router.get("/products/{product_id}", response_model=schemas.ProductResponse)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+@router.post("/products", response_model=schemas.ProductResponse)
+async def create_product(
+    name: str = Form(...),
+    description: str = Form(...),
+    main_image: UploadFile = File(...),
+    sub_images: List[UploadFile] = File([]),
+    current_user: models.User = Depends(auth.get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Save main image
+        file_ext = os.path.splitext(main_image.filename)[1]
+        main_file_name = f"{uuid.uuid4()}{file_ext}"
+        main_file_path = os.path.join("static/uploads", main_file_name)
+        with open(main_file_path, "wb") as buffer:
+            shutil.copyfileobj(main_image.file, buffer)
+        main_image_url = f"/static/uploads/{main_file_name}"
+        
+        # Create product
+        new_product = models.Product(
+            name=name,
+            description=description,
+            image_url=main_image_url
+        )
+        db.add(new_product)
+        db.commit()
+        db.refresh(new_product)
+        
+        # Save sub-images
+        for img in sub_images:
+            if img.filename:
+                s_ext = os.path.splitext(img.filename)[1]
+                s_file_name = f"{uuid.uuid4()}{s_ext}"
+                s_file_path = os.path.join("static/uploads", s_file_name)
+                with open(s_file_path, "wb") as buffer:
+                    shutil.copyfileobj(img.file, buffer)
+                s_url = f"/static/uploads/{s_file_name}"
+                db_img = models.ProductImage(product_id=new_product.id, image_url=s_url)
+                db.add(db_img)
+        
+        db.commit()
+        db.refresh(new_product)
+        return new_product
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
+@router.post("/logout")
+def logout(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    current_user.is_logged_in = False
+    db.commit()
+    return {"message": "Logged out successfully"}
+
+@router.put("/admin/users/{user_id}/toggle-admin", response_model=schemas.UserResponse)
+def toggle_admin_status(user_id: int, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="For safety, you cannot revoke your own administrator status.")
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.is_admin = not user.is_admin
+    db.commit()
+    db.refresh(user)
+    return user

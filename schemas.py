@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, field_validator
+from typing import List
 import re
 
 class UserCreate(BaseModel):
@@ -27,9 +28,38 @@ class UserResponse(BaseModel):
     mobile: str
     is_registered: bool
     is_logged_in: bool
+    is_admin: bool
 
     class Config:
         from_attributes = True
+
+class ProductImageResponse(BaseModel):
+    id: int
+    image_url: str
+
+    class Config:
+        from_attributes = True
+
+class ProductCreate(BaseModel):
+    name: str
+    description: str
+    image_url: str
+
+class ProductResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    image_url: str
+    is_published: bool
+    sub_images: List[ProductImageResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class DashboardStats(BaseModel):
+    total_users: int
+    logged_in_users: int
+    active_users: int
 
 class Token(BaseModel):
     access_token: str

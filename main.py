@@ -11,7 +11,29 @@ except Exception as e:
     print(f"⚠ Warning: Could not create database tables on startup: {e}")
     print("The app will continue running. Tables will be created on first database operation.")
 
+from fastapi.staticfiles import StaticFiles
+import os
+
 app = FastAPI(title="Jay Industries API")
+
+# Ensure static/uploads exists
+if not os.path.exists("static/uploads"):
+    os.makedirs("static/uploads", exist_ok=True)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.on_event("startup")
+def startup_event():
+    db = database.SessionLocal()
+    try:
+        db.query(models.User).update({models.User.is_logged_in: False})
+        db.commit()
+        print("✓ Reset all user login statuses on startup")
+    except Exception as e:
+        print(f"⚠ Warning: Could not reset login statuses: {e}")
+    finally:
+        db.close()
 
 # Configure CORS for Next.js frontend (localhost + Vercel production)
 origins = [
