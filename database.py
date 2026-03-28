@@ -21,11 +21,11 @@ else:
     host = SQLALCHEMY_DATABASE_URL.split('@')[-1]
     print(f"Connecting to database host: {host}")
 
-# Use connection pooling for better reliability
+# Use NullPool when connecting to an external pooler (like Supabase Transaction pooler)
+# to avoid double-pooling and session issues.
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    pool_pre_ping=True,  # Verify connection before using it
-    pool_recycle=3600,   # Recycle connections every hour
+    poolclass=NullPool,
     connect_args={"connect_timeout": 10}  # 10 second timeout
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
