@@ -36,12 +36,23 @@ try:
 except Exception:
     print("Connecting to database...")
 
-# Use NullPool when connecting to an external pooler (like Supabase Transaction pooler)
-# to avoid double-pooling and session issues.
+# Enhanced engine configuration for Production (Supabase Session Pooler)
+# Adding ?prepared_statements=false as a safeguard for poolers
+if IS_DEPLOYED or ENVIRONMENT == "production":
+    if "?" in SQLALCHEMY_DATABASE_URL:
+        if "prepared_statements=false" not in SQLALCHEMY_DATABASE_URL:
+            SQLALCHEMY_DATABASE_URL += "&prepared_statements=false"
+    else:
+        SQLALCHEMY_DATABASE_URL += "?prepared_statements=false"
+
+# Use QueuePool (default) with safety checks for Render
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    poolclass=NullPool,
-    connect_args={"connect_timeout": 10}  # 10 second timeout
+    pool_pre_ping=True,      # Checks connection health before every request
+    pool_recycle=300,        # Recycles connections every 5 minutes to prevent stale ones
+    pool_size=5,             # Limit connections to avoid hitting Supabase limits
+    max_overflow=10,
+    connect_args={"connect_timeout": 30} # Longer timeout for cloud connections
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
