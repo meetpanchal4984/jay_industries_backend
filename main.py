@@ -3,13 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 import models, database
 from routes import router
 
-# Create the database tables with error handling
+# Database tables will be initialized on the first request if this fails
+# Adding resilience for production environments on Render
 try:
+    print(f"[INFO] Initializing database connection to: {database.SQLALCHEMY_DATABASE_URL.split('@')[-1].split('/')[0]}")
     models.Base.metadata.create_all(bind=database.engine)
-    print("[INFO] Database tables created successfully")
+    print("[INFO] Database tables verified/created successfully")
 except Exception as e:
-    print(f"[WARNING] Warning: Could not create database tables on startup: {e}")
-    print("The app will continue running. Tables will be created on first database operation.")
+    print(f"[WARNING] Database connection during startup failed: {e}")
+    print("FastAPI will retry connection automatically on the first API request.")
 
 from fastapi.staticfiles import StaticFiles
 import os
@@ -25,15 +27,21 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event("startup")
 def startup_event():
-    db = database.SessionLocal()
-    try:
-        db.query(models.User).update({models.User.is_logged_in: False})
-        db.commit()
-        print("[INFO] Reset all user login statuses on startup")
-    except Exception as e:
-        print(f"[WARNING] Warning: Could not reset login statuses: {e}")
-    finally:
-        db.close()
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        db = database.SessionLocal()
+        try:
+            db.query(models.User).update({models.User.is_logged_in: False})
+            db.commit()
+            print("[INFO] Reset all user login statuses on startup")
+            break
+        except Exception as e:
+            print(f"[WARNING] Attempt {attempt + 1}: Could not reset login statuses: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+        finally:
+            db.close()
 
 # Configure CORS for Next.js frontend (localhost + Vercel production)
 origins = [

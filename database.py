@@ -10,23 +10,25 @@ from sqlalchemy.pool import NullPool
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+# Priority: Use SUPABASE_DATABASE_URL for production
+# Render sometimes fills DATABASE_URL with its own internal values, so we prioritize the Supabase one
+SUPABASE_URL = os.getenv("SUPABASE_DATABASE_URL")
+RENDER_URL = os.getenv("DATABASE_URL")
+LOCAL_URL = os.getenv("LOCAL_DATABASE_URL", "postgresql://postgres:admin@localhost/jay_industries")
 
-# Automatically detect if running on Render or Vercel
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_DEPLOYED = os.getenv("RENDER") or os.getenv("VERCEL")
 
 if IS_DEPLOYED or ENVIRONMENT == "production":
-    # Use DATABASE_URL (standard for most deployment platforms) or the specific Supabase one from .env
-    SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DATABASE_URL")
-    print("[INFO] Backend Running in PRODUCTION mode")
+    SQLALCHEMY_DATABASE_URL = SUPABASE_URL or RENDER_URL
+    print(f"[INFO] Backend Running in PRODUCTION mode (Using: {'SUPABASE' if SUPABASE_URL else 'RENDER'} URL)")
 else:
-    # Use local database for development
-    SQLALCHEMY_DATABASE_URL = os.getenv("LOCAL_DATABASE_URL", "postgresql://postgres:admin@localhost/jay_industries")
+    SQLALCHEMY_DATABASE_URL = LOCAL_URL
     print("[INFO] Backend Running in DEVELOPMENT mode")
 
 if not SQLALCHEMY_DATABASE_URL:
-    print("[ERROR] CRITICAL ERROR: No database URL found!")
-    SQLALCHEMY_DATABASE_URL = "postgresql://postgres:admin@localhost/jay_industries"
+    print("[ERROR] CRITICAL: No database URL found!")
+    SQLALCHEMY_DATABASE_URL = LOCAL_URL
 
 # Print the host to verify connection (omitting password for security)
 try:
@@ -41,10 +43,16 @@ except Exception:
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_pre_ping=True,      # Checks connection health before every request
-    pool_recycle=300,        # Recycles connections every 5 minutes
-    pool_size=10,            # Standard pooling for Render
-    max_overflow=20,
-    connect_args={"connect_timeout": 30} # Longer timeout for cloud connections
+    pool_recycle=60,         # Recycles connections every 60 seconds to prevent idle timeouts
+    pool_size=5,             # Conservative pooling for stability
+    max_overflow=10,
+    connect_args={
+        "connect_timeout": 30,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
