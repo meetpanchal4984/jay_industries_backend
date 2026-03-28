@@ -36,22 +36,14 @@ try:
 except Exception:
     print("Connecting to database...")
 
-# Enhanced engine configuration for Production (Supabase Session Pooler)
-# Adding ?prepared_statements=false as a safeguard for poolers
-if IS_DEPLOYED or ENVIRONMENT == "production":
-    if "?" in SQLALCHEMY_DATABASE_URL:
-        if "prepared_statements=false" not in SQLALCHEMY_DATABASE_URL:
-            SQLALCHEMY_DATABASE_URL += "&prepared_statements=false"
-    else:
-        SQLALCHEMY_DATABASE_URL += "?prepared_statements=false"
-
 # Use QueuePool (default) with safety checks for Render
+# pool_pre_ping is the most important fix for "SSL closed unexpectedly" on Render/Supabase
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_pre_ping=True,      # Checks connection health before every request
-    pool_recycle=300,        # Recycles connections every 5 minutes to prevent stale ones
-    pool_size=5,             # Limit connections to avoid hitting Supabase limits
-    max_overflow=10,
+    pool_recycle=300,        # Recycles connections every 5 minutes
+    pool_size=10,            # Standard pooling for Render
+    max_overflow=20,
     connect_args={"connect_timeout": 30} # Longer timeout for cloud connections
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
