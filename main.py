@@ -43,17 +43,18 @@ def startup_event():
         finally:
             db.close()
 
-# Configure CORS for Next.js frontend (localhost + Vercel production)
+# Configure CORS for Next.js frontend (localhost + Vercel production + local network)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://jay-industries-opal.vercel.app",  # Your Vercel domain
-    "https://*.vercel.app",  # Allow all Vercel preview deployments
+    "https://jay-industries-opal.vercel.app",
+    "https://*.vercel.app",
 ]
 
+# Add middleware with more permissive development settings to support mobile testing on local network
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"] if os.getenv("ENVIRONMENT") == "development" else origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
