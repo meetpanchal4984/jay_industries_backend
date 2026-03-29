@@ -43,9 +43,9 @@ except Exception:
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_pre_ping=True,      # Checks connection health before every request
-    pool_recycle=60,         # Recycles connections every 60 seconds to prevent idle timeouts
-    pool_size=5,             # Conservative pooling for stability
-    max_overflow=10,
+    pool_recycle=300,        # Recycles connections every 5 minutes (more standard)
+    pool_size=20,            # High capacity pooling
+    max_overflow=30,         # Allow up to 50 concurrent connections
     connect_args={
         "connect_timeout": 30,
         "keepalives": 1,
