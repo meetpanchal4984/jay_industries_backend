@@ -4,9 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List
 import models, schemas, auth, database
-import shutil
-import os
-import uuid
+from storage import upload_image, delete_image
 
 router = APIRouter()
 
@@ -133,20 +131,26 @@ def toggle_product_publish(product_id: int, current_user: models.User = Depends(
     return product
 
 @router.delete("/admin/products/{product_id}")
-def delete_product(product_id: int, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
+async def delete_product(product_id: int, current_user: models.User = Depends(auth.get_current_admin_user), db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Delete main image file
-    if product.image_url.startswith("/static/"):
+    # Delete main image from Supabase
+    if product.image_url.startswith("http"):
+        await delete_image(product.image_url)
+    elif product.image_url.startswith("/static/"):
+        import os
         path = product.image_url.lstrip("/")
         if os.path.exists(path):
             os.remove(path)
             
-    # Sub-images will be deleted by cascade from DB, but we need to delete the files
+    # Delete sub-images from Supabase
     for img in product.sub_images:
-        if img.image_url.startswith("/static/"):
+        if img.image_url.startswith("http"):
+            await delete_image(img.image_url)
+        elif img.image_url.startswith("/static/"):
+            import os
             path = img.image_url.lstrip("/")
             if os.path.exists(path):
                 os.remove(path)
@@ -172,13 +176,9 @@ async def create_product(
     db: Session = Depends(get_db)
 ):
     try:
-        # Save main image
-        file_ext = os.path.splitext(main_image.filename)[1]
-        main_file_name = f"{uuid.uuid4()}{file_ext}"
-        main_file_path = os.path.join("static/uploads", main_file_name)
-        with open(main_file_path, "wb") as buffer:
-            shutil.copyfileobj(main_image.file, buffer)
-        main_image_url = f"/static/uploads/{main_file_name}"
+        # Save main image to Supabase
+        main_image_content = await main_image.read()
+        main_image_url = await upload_image(main_image_content, main_image.filename)
         
         # Create product
         new_product = models.Product(
@@ -190,15 +190,11 @@ async def create_product(
         db.commit()
         db.refresh(new_product)
         
-        # Save sub-images
+        # Save sub-images to Supabase
         for img in sub_images:
             if img.filename:
-                s_ext = os.path.splitext(img.filename)[1]
-                s_file_name = f"{uuid.uuid4()}{s_ext}"
-                s_file_path = os.path.join("static/uploads", s_file_name)
-                with open(s_file_path, "wb") as buffer:
-                    shutil.copyfileobj(img.file, buffer)
-                s_url = f"/static/uploads/{s_file_name}"
+                s_content = await img.read()
+                s_url = await upload_image(s_content, img.filename)
                 db_img = models.ProductImage(product_id=new_product.id, image_url=s_url)
                 db.add(db_img)
         
@@ -207,7 +203,9 @@ async def create_product(
         return new_product
     except Exception as e:
         db.rollback()
+        print(f"[ERROR] Product Create Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
+
 @router.post("/logout")
 def logout(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     # Fetch the user in the current session to ensure the update is recorded
