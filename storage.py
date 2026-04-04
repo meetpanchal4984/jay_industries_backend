@@ -44,18 +44,22 @@ async def upload_image(file_content: bytes, filename: str) -> str:
         content_type = "image/png"
     
     try:
-        # Uploading file to the bucket using the latest async API
+        # Uploading file to the bucket
         await client.storage.from_(BUCKET_NAME).upload(
             path=unique_filename,
             file=file_content,
             file_options={"content-type": content_type}
         )
         
-        # Getting the public URL
-        # In the latest version, get_public_url is often synchronous but some clients treat it as async.
-        # To be safe, we check and call it directly.
-        public_url_res = client.storage.from_(BUCKET_NAME).get_public_url(unique_filename)
-        return str(public_url_res)
+        # MANUALLY CONSTRUCTING THE PUBLIC URL
+        # This is the most reliable way to avoid coroutine/version issues with the SDK.
+        # Format: https://{project_id}.supabase.co/storage/v1/object/public/{bucket}/{filename}
+        
+        # Extract project ID from SUPABASE_URL (e.g., https://bqrfptfq...supabase.co)
+        project_url = SUPABASE_URL.rstrip('/')
+        public_url = f"{project_url}/storage/v1/object/public/{BUCKET_NAME}/{unique_filename}"
+        
+        return public_url
     except Exception as e:
         print(f"[ERROR] Supabase Upload Error: {str(e)}")
         raise Exception(f"Failed to upload image: {str(e)}")
@@ -71,7 +75,7 @@ async def delete_image(image_url: str):
 
     try:
         if BUCKET_NAME in image_url:
-            # Extract the path from the URL
+            # Extract the path (filename) from the URL
             path = image_url.split(f"{BUCKET_NAME}/")[-1]
             # Remove any query parameters
             path = path.split("?")[0]
