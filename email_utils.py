@@ -60,7 +60,7 @@ async def send_contact_email(name: str, email: str, phone: str, subject: str, me
         r = resend.Emails.send({
             # The 'from' must be onboarding@resend.dev unless a custom domain is verified
             "from": "Jay Industries <onboarding@resend.dev>",
-            "to": "meetpanchal4984@gmail.com",
+            "to": "bipinjski@gmail.com",
             # We set reply_to as the contact's email so when you hit "Reply", it goes to them
             "reply_to": email,
             "subject": f"New Inquiry: {subject} - {name}",
