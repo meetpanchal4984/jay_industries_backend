@@ -8,6 +8,6 @@ pydantic
 email-validator
 python-dotenv
 python-multipart
-fastapi-mail==1.4.1
+resend
 gunicorn
 supabase
