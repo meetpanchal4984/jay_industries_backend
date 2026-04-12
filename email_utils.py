@@ -1,9 +1,11 @@
 import os
 import resend
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Apply the user's explicit API Key
-# resend.api_key = "re_SYdL3TzU_4o375vi2F2ewLGt1iidnccvk"
-resend.api_key = "re_foHCusGy_LBGcPnW8ZtfgribZb7DaDYM1"
+resend.api_key = os.getenv("RESEND_API_KEY")
 
 async def send_contact_email(name: str, email: str, phone: str, subject: str, message: str):
     """
